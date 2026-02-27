@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "declaration": true,
+    "declarationDir": "dist",
+    "outDir": "dist",
+    "rootDir": "ts/src",
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["ts/src/**/*"],
+  "exclude": ["node_modules", "dist", "ts/wasm"]
+}
