@@ -1,0 +1,7 @@
+{
+  "entryPoints": ["ts/src/index.ts", "ts/src/three.ts"],
+  "out": "docs",
+  "name": "sim-lidar-rs",
+  "includeVersion": true,
+  "readme": "README.md"
+}
