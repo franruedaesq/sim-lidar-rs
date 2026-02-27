@@ -1,0 +1,33 @@
+{
+  "name": "sim-lidar-rs",
+  "version": "0.1.0",
+  "description": "High-performance simulated LiDAR sensor library for WebAssembly",
+  "type": "module",
+  "main": "./dist/sim-lidar-rs.js",
+  "types": "./dist/sim-lidar-rs.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/sim-lidar-rs.js",
+      "types": "./dist/sim-lidar-rs.d.ts"
+    }
+  },
+  "scripts": {
+    "build:wasm": "wasm-pack build --target web --out-dir ts/wasm",
+    "build": "npm run build:wasm && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^1.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0",
+    "vite-plugin-wasm": "^3.3.0",
+    "vitest": "^1.0.0"
+  },
+  "files": [
+    "dist",
+    "ts/wasm"
+  ],
+  "license": "MIT"
+}
