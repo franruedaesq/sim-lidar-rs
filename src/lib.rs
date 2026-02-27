@@ -6,7 +6,7 @@ use glam::{Quat, Vec3};
 use wasm_bindgen::prelude::*;
 
 pub use bvh::{Intersection, Ray};
-pub use sensor::SensorConfig;
+pub use sensor::{LidarConfig, SensorConfig};
 
 /// The main LiDAR simulator.  Holds the pre-built BVH for the environment
 /// geometry and exposes scanning methods to JavaScript via wasm-bindgen.
