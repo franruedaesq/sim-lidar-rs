@@ -5,6 +5,7 @@ mod sensor;
 use glam::{Quat, Vec3};
 use wasm_bindgen::prelude::*;
 
+pub use bvh::{Intersection, Ray};
 pub use sensor::SensorConfig;
 
 /// The main LiDAR simulator.  Holds the pre-built BVH for the environment
