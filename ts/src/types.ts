@@ -93,3 +93,63 @@ export interface Geometry {
   /** Flat array of triangle vertex indices. */
   indices: Uint32Array;
 }
+
+// ─── Custom Error classes ─────────────────────────────────────────────────────
+
+/**
+ * Base error class for all sim-lidar-rs errors.
+ * Exported so consumers can use `err instanceof SimLidarError` to distinguish
+ * library errors from other runtime errors.
+ */
+export class SimLidarError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SimLidarError";
+    // Restore prototype chain for subclass `instanceof` checks in transpiled environments.
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when a scan or environment update is requested before the simulator
+ * has been initialised (i.e. before `init()` or `ready()` has resolved).
+ */
+export class SimLidarNotInitializedError extends SimLidarError {
+  constructor() {
+    super("Simulator not initialised. Await init() / ready() before calling scan().");
+    this.name = "SimLidarNotInitializedError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when any method is called on a simulator instance that has already
+ * been disposed via `destroy()` or `dispose()`.
+ */
+export class SimLidarDisposedError extends SimLidarError {
+  constructor() {
+    super("This SimLidar instance has been destroyed and can no longer be used.");
+    this.name = "SimLidarDisposedError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+// ─── Observability ───────────────────────────────────────────────────────────
+
+/**
+ * Optional event callbacks that can be passed to {@link SimLidar} and
+ * {@link LidarClient} constructors for observability and debugging.
+ */
+export interface SimLidarEventHandlers {
+  /**
+   * Called once the Wasm module has been loaded and the simulator is ready.
+   * Equivalent to awaiting `init()` / `ready()`.
+   */
+  onReady?: () => void;
+  /**
+   * Called whenever a worker-level error occurs (e.g. Wasm panic, unhandled
+   * exception inside the worker). Provides the error before it propagates to
+   * pending Promise rejections.
+   */
+  onError?: (err: SimLidarError) => void;
+}

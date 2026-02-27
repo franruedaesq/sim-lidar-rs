@@ -32,6 +32,7 @@
     }
   },
   "devDependencies": {
+    "@types/node": "^20.19.35",
     "@vitest/coverage-v8": "^1.0.0",
     "typedoc": "^0.28.0",
     "typescript": "^5.4.0",
@@ -43,5 +44,8 @@
     "dist",
     "ts/wasm"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }

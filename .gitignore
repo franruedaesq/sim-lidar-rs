@@ -1,6 +1,7 @@
 /target
 /node_modules
 /dist
-/ts/wasm
+/ts/wasm/*
+!/ts/wasm/sim_lidar_rs.d.ts
 /docs
 *.lock

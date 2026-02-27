@@ -11,15 +11,19 @@
  * ```
  */
 
-export type { SensorConfig, Pose, ScanResult, Geometry } from "./types.js";
+export type { SensorConfig, Pose, ScanResult, Geometry, SimLidarEventHandlers } from "./types.js";
 export {
   VLP16_CONFIG,
   OUSTER_OS1_32_CONFIG,
   OUSTER_OS1_64_CONFIG,
   totalRays,
+  SimLidarError,
+  SimLidarNotInitializedError,
+  SimLidarDisposedError,
 } from "./types.js";
 
-import type { SensorConfig, Pose, ScanResult, Geometry } from "./types.js";
+import type { SensorConfig, Pose, ScanResult, Geometry, SimLidarEventHandlers } from "./types.js";
+import { SimLidarError, SimLidarDisposedError } from "./types.js";
 
 /**
  * `LidarClient` wraps the Wasm LiDAR simulator running inside a Web Worker.
@@ -30,14 +34,19 @@ export class LidarClient {
   private pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private readyPromise: Promise<void>;
   private _scanCounter = 0;
+  private _disposed = false;
+  private readonly _handlers: SimLidarEventHandlers;
 
   constructor(
     vertices: Float32Array,
     indices: Uint32Array,
     config: SensorConfig,
     /** Optional URL/path to the worker script. Defaults to the bundled worker. */
-    workerUrl?: string | URL
+    workerUrl?: string | URL,
+    /** Optional observability callbacks. */
+    handlers?: SimLidarEventHandlers
   ) {
+    this._handlers = handlers ?? {};
     const url = workerUrl ?? new URL("./worker.js", import.meta.url);
     this.worker = new Worker(url, { type: "module" });
     this.worker.addEventListener("message", this._onMessage.bind(this));
@@ -65,11 +74,13 @@ export class LidarClient {
 
   /** Update the sensor configuration without rebuilding the BVH. */
   setConfig(config: SensorConfig): void {
+    if (this._disposed) throw new SimLidarDisposedError();
     this.worker.postMessage({ type: "setConfig", config });
   }
 
   /** Run a full scan and return the resulting point cloud. */
   scan(pose: Pose): Promise<ScanResult> {
+    if (this._disposed) return Promise.reject(new SimLidarDisposedError());
     return new Promise<ScanResult>((resolve, reject) => {
       const id = `scan_${++this._scanCounter}`;
       this.pending.set(id, {
@@ -80,10 +91,16 @@ export class LidarClient {
     });
   }
 
-  /** Terminate the underlying Web Worker. */
+  /** Terminate the underlying Web Worker, rejecting any in-flight scan Promises. */
   dispose(): void {
-    this.worker.terminate();
+    if (this._disposed) return;
+    this._disposed = true;
+    const err = new SimLidarDisposedError();
+    for (const entry of this.pending.values()) {
+      entry.reject(err);
+    }
     this.pending.clear();
+    this.worker.terminate();
   }
 
   private _onMessage(evt: MessageEvent): void {
@@ -94,6 +111,7 @@ export class LidarClient {
       if (entry) {
         this.pending.delete("__ready__");
         entry.resolve(undefined);
+        this._handlers.onReady?.();
       }
       return;
     }
@@ -109,7 +127,8 @@ export class LidarClient {
     }
 
     if (msg.type === "error") {
-      const err = new Error(msg.message as string);
+      const err = new SimLidarError(msg.message as string);
+      this._handlers.onError?.(err);
       for (const entry of this.pending.values()) {
         entry.reject(err);
       }
@@ -142,13 +161,18 @@ export class SimLidar {
   >();
   private _counter = 0;
   private readonly _config: SensorConfig;
+  private _disposed = false;
+  private readonly _handlers: SimLidarEventHandlers;
 
   constructor(
     config: SensorConfig,
     /** Optional URL/path to the worker script. Defaults to the bundled worker. */
-    workerUrl?: string | URL
+    workerUrl?: string | URL,
+    /** Optional observability callbacks. */
+    handlers?: SimLidarEventHandlers
   ) {
     this._config = config;
+    this._handlers = handlers ?? {};
     const url = workerUrl ?? new URL("./worker.js", import.meta.url);
     this.worker = new Worker(url, { type: "module" });
     this.worker.addEventListener("message", this._onMessage.bind(this));
@@ -159,6 +183,7 @@ export class SimLidar {
    * Must be called before {@link updateEnvironment} or {@link scan}.
    */
   init(): Promise<void> {
+    if (this._disposed) return Promise.reject(new SimLidarDisposedError());
     return new Promise<void>((resolve, reject) => {
       this.pending.set("__ready__", {
         resolve: resolve as (v: unknown) => void,
@@ -173,6 +198,7 @@ export class SimLidar {
    * Buffers are transferred to the worker to avoid copying.
    */
   updateEnvironment(geometry: Geometry): Promise<void> {
+    if (this._disposed) return Promise.reject(new SimLidarDisposedError());
     return new Promise<void>((resolve, reject) => {
       const id = `env_${++this._counter}`;
       this.pending.set(id, {
@@ -195,6 +221,7 @@ export class SimLidar {
    *   hit coordinates `[x,y,z, x,y,z, …]`.
    */
   scan(pose: Pose): Promise<Float32Array> {
+    if (this._disposed) return Promise.reject(new SimLidarDisposedError());
     return new Promise<Float32Array>((resolve, reject) => {
       const id = `scan_${++this._counter}`;
       this.pending.set(id, {
@@ -209,10 +236,12 @@ export class SimLidar {
    * Destroy the simulator: asks the worker to explicitly free the Wasm
    * instance (releasing linear memory) and then terminates the worker thread.
    *
-   * Any in-flight Promises are rejected with a "SimLidar destroyed" error.
+   * Any in-flight Promises are rejected with a {@link SimLidarDisposedError}.
    */
   destroy(): void {
-    const err = new Error("SimLidar destroyed");
+    if (this._disposed) return;
+    this._disposed = true;
+    const err = new SimLidarDisposedError();
     for (const entry of this.pending.values()) {
       entry.reject(err);
     }
@@ -229,6 +258,7 @@ export class SimLidar {
       if (entry) {
         this.pending.delete("__ready__");
         entry.resolve(undefined);
+        this._handlers.onReady?.();
       }
       return;
     }
@@ -264,7 +294,8 @@ export class SimLidar {
     }
 
     if (msg.type === "error") {
-      const err = new Error(msg.message as string);
+      const err = new SimLidarError(msg.message as string);
+      this._handlers.onError?.(err);
       for (const entry of this.pending.values()) {
         entry.reject(err);
       }
@@ -272,3 +303,4 @@ export class SimLidar {
     }
   }
 }
+

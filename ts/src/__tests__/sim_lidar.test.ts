@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { SensorConfig, Pose, Geometry } from "../types.js";
+import { SimLidarDisposedError } from "../types.js";
 
 // ── Fixture data ──────────────────────────────────────────────────────────────
 
@@ -160,6 +161,6 @@ describe("SimLidar", () => {
     const scanPromise = lidar.scan(ORIGIN_POSE);
     lidar.destroy();
 
-    await expect(scanPromise).rejects.toThrow("SimLidar destroyed");
+    await expect(scanPromise).rejects.toThrow(SimLidarDisposedError);
   });
 });
