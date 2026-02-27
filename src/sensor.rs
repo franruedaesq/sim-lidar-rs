@@ -1,6 +1,9 @@
 use glam::Vec3;
 use wasm_bindgen::prelude::*;
 
+/// Type alias for [`SensorConfig`]. Refers to the same sensor configuration struct.
+pub type LidarConfig = SensorConfig;
+
 /// Sensor configuration mirroring real-world LiDARs (e.g., Velodyne VLP-16, Ouster).
 #[wasm_bindgen]
 #[derive(Clone, Debug)]
@@ -67,11 +70,14 @@ impl SensorConfig {
 }
 
 impl SensorConfig {
-    /// Generate all ray directions for a full scan given a pose.
+    /// Generate all sensor-local ray directions for a full scan.
     ///
-    /// `position` and `rotation` together define the sensor pose.
-    /// `rotation` is a unit quaternion as `[x, y, z, w]`.
-    pub fn generate_ray_directions(&self, rotation: glam::Quat) -> Vec<Vec3> {
+    /// Returns unit vectors in the sensor's own coordinate frame, with no
+    /// pose transformation applied.  Use [`generate_ray_directions`] to obtain
+    /// world-space directions for a specific sensor orientation.
+    ///
+    /// [`generate_ray_directions`]: SensorConfig::generate_ray_directions
+    pub fn generate_local_ray_directions(&self) -> Vec<Vec3> {
         let total = (self.horizontal_resolution * self.vertical_channels) as usize;
         let mut directions = Vec::with_capacity(total);
 
@@ -92,15 +98,28 @@ impl SensorConfig {
 
             for h in 0..self.horizontal_resolution {
                 let azimuth_rad = (h as f32 * h_step).to_radians();
-                let local_dir = Vec3::new(
+                directions.push(Vec3::new(
                     cos_elev * azimuth_rad.cos(),
                     sin_elev,
                     cos_elev * azimuth_rad.sin(),
-                );
-                directions.push(rotation * local_dir);
+                ));
             }
         }
         directions
+    }
+
+    /// Generate all ray directions for a full scan given a sensor orientation.
+    ///
+    /// Applies `rotation` to each local direction returned by
+    /// [`generate_local_ray_directions`], producing world-space unit vectors.
+    /// `rotation` must be a unit quaternion.
+    ///
+    /// [`generate_local_ray_directions`]: SensorConfig::generate_local_ray_directions
+    pub fn generate_ray_directions(&self, rotation: glam::Quat) -> Vec<Vec3> {
+        self.generate_local_ray_directions()
+            .into_iter()
+            .map(|dir| rotation * dir)
+            .collect()
     }
 }
 
@@ -139,6 +158,81 @@ mod tests {
         for d in &dirs {
             let len = d.length();
             assert!((len - 1.0).abs() < 1e-5, "Direction not normalised: length={len}");
+        }
+    }
+
+    // ── TDD: LidarConfig / 16-channel 360-degree scan ──────────────────────
+
+    /// `LidarConfig` is a type alias for `SensorConfig`; use it interchangeably.
+    #[test]
+    fn test_lidar_config_alias() {
+        let cfg: LidarConfig = LidarConfig::new(360, 16, 15.0, -15.0, 0.1, 100.0, 0.0);
+        assert_eq!(cfg.vertical_channels, 16);
+        assert_eq!(cfg.horizontal_resolution, 360);
+    }
+
+    /// A 16-channel, 360-degree config must produce exactly 16 × 360 = 5 760 local
+    /// direction vectors.
+    #[test]
+    fn test_generate_local_ray_directions_16ch_360deg_count() {
+        let cfg = LidarConfig::new(360, 16, 15.0, -15.0, 0.1, 100.0, 0.0);
+        let dirs = cfg.generate_local_ray_directions();
+        assert_eq!(dirs.len(), 360 * 16, "Expected 5760 local ray directions");
+    }
+
+    /// At azimuth index 0 (0° horizontal) the ray must lie in the XY-plane (Z ≈ 0)
+    /// and point toward +X (X > 0).
+    #[test]
+    fn test_generate_local_ray_0deg_horizontal() {
+        let cfg = LidarConfig::new(360, 16, 15.0, -15.0, 0.1, 100.0, 0.0);
+        let dirs = cfg.generate_local_ray_directions();
+        // Channel v=0, azimuth h=0 → index 0
+        let dir = dirs[0];
+        assert!(dir.z.abs() < 1e-5, "Z must be ~0 for 0° azimuth, got {}", dir.z);
+        assert!(dir.x > 0.0, "X must be positive for 0° azimuth, got {}", dir.x);
+    }
+
+    /// The last vertical channel (v = channels-1) at azimuth 0 must have a Y
+    /// component equal to sin(vertical_fov_upper).
+    #[test]
+    fn test_generate_local_ray_max_vertical_fov() {
+        let cfg = LidarConfig::new(360, 16, 15.0, -15.0, 0.1, 100.0, 0.0);
+        let dirs = cfg.generate_local_ray_directions();
+        // Channel v=15 (fov_upper = 15°), azimuth h=0 → index 15 * 360 + 0
+        let dir = dirs[15 * 360];
+        let expected_y = 15.0_f32.to_radians().sin();
+        assert!(
+            (dir.y - expected_y).abs() < 1e-5,
+            "Y must equal sin(fov_upper)={}; got {}",
+            expected_y,
+            dir.y
+        );
+        assert!(dir.z.abs() < 1e-5, "Z must be ~0 for 0° azimuth, got {}", dir.z);
+    }
+
+    /// `generate_ray_directions` must apply the quaternion rotation to each local
+    /// direction produced by `generate_local_ray_directions`.
+    #[test]
+    fn test_generate_ray_directions_applies_rotation() {
+        let cfg = LidarConfig::new(360, 16, 15.0, -15.0, 0.1, 100.0, 0.0);
+        // 180° rotation around Y-axis flips X → -X and Z → -Z
+        let rot = glam::Quat::from_rotation_y(std::f32::consts::PI);
+        let local_dirs = cfg.generate_local_ray_directions();
+        let world_dirs = cfg.generate_ray_directions(rot);
+        assert_eq!(local_dirs.len(), world_dirs.len());
+        for (local, world) in local_dirs.iter().zip(world_dirs.iter()) {
+            assert!(
+                (world.x + local.x).abs() < 1e-5,
+                "180° Y-rotation must negate X: local.x={}, world.x={}",
+                local.x,
+                world.x
+            );
+            assert!(
+                (world.y - local.y).abs() < 1e-5,
+                "180° Y-rotation must preserve Y: local.y={}, world.y={}",
+                local.y,
+                world.y
+            );
         }
     }
 }
