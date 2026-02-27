@@ -114,7 +114,7 @@ self.addEventListener("message", async (evt: MessageEvent) => {
       ).slice();
       self.postMessage(
         { type: "scan", hits, hitCount: hits.length / 3, __id: msg.__id },
-        [hits.buffer]
+        { transfer: [hits.buffer] }
       );
       return;
     }

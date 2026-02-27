@@ -86,5 +86,8 @@ jobs:
       - name: Install Node.js dependencies
         run: npm ci
 
+      - name: Type-check and lint
+        run: npm run lint
+
       - name: Run TypeScript tests
         run: npm test

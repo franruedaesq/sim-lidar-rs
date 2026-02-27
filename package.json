@@ -44,5 +44,8 @@
     "dist",
     "ts/wasm"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
