@@ -83,3 +83,13 @@ export const OUSTER_OS1_64_CONFIG: Readonly<SensorConfig> = {
 export function totalRays(config: SensorConfig): number {
   return config.horizontalResolution * config.verticalChannels;
 }
+
+/**
+ * Environment geometry consumed by {@link SimLidar.updateEnvironment}.
+ */
+export interface Geometry {
+  /** Flat array of vertex positions `[x,y,z, …]`. */
+  vertices: Float32Array;
+  /** Flat array of triangle vertex indices. */
+  indices: Uint32Array;
+}
