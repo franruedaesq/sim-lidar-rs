@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/sim-lidar-rs.js",
       "types": "./dist/sim-lidar-rs.d.ts"
+    },
+    "./three": {
+      "import": "./dist/three.js",
+      "types": "./dist/three.d.ts"
     }
   },
   "scripts": {
@@ -17,6 +21,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "three": ">=0.150.0"
+  },
+  "peerDependenciesMeta": {
+    "three": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^1.0.0",

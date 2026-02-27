@@ -5,13 +5,14 @@ export default defineConfig({
   plugins: [wasm()],
   build: {
     lib: {
-      entry: "ts/src/index.ts",
-      name: "SimLidarRs",
-      fileName: "sim-lidar-rs",
+      entry: {
+        "sim-lidar-rs": "ts/src/index.ts",
+        "three": "ts/src/three.ts",
+      },
       formats: ["es"],
     },
     rollupOptions: {
-      external: [],
+      external: ["three"],
     },
   },
   test: {
